@@ -1,0 +1,137 @@
+version: "3.7"
+
+services:
+  traefik:
+    container_name: traefik
+    image: "traefik"
+    restart: always
+    command:
+      - "--api=true"
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.mytlschallenge.acme.tlschallenge=true"
+      - "--certificatesresolvers.mytlschallenge.acme.email=admin@myaiya.dev"
+      - "--certificatesresolvers.mytlschallenge.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - traefik_data:/letsencrypt
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+  n8n:
+    image: docker.n8n.io/n8nio/n8n
+    container_name: n8n
+    restart: always
+    ports:
+      - "127.0.0.1:5678:5678"
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.n8n.rule=Host(`n8n.myaiya.dev`)
+      - traefik.http.routers.n8n.tls=true
+      - traefik.http.routers.n8n.entrypoints=web,websecure
+      - traefik.http.routers.n8n.tls.certresolver=mytlschallenge
+      - traefik.http.middlewares.n8n.headers.SSLRedirect=true
+      - traefik.http.middlewares.n8n.headers.STSSeconds=315360000
+      - traefik.http.middlewares.n8n.headers.browserXSSFilter=true
+      - traefik.http.middlewares.n8n.headers.contentTypeNosniff=true
+      - traefik.http.middlewares.n8n.headers.forceSTSHeader=true
+      - traefik.http.middlewares.n8n.headers.SSLHost=myaiya.dev
+      - traefik.http.middlewares.n8n.headers.STSIncludeSubdomains=true
+      - traefik.http.middlewares.n8n.headers.STSPreload=true
+      - traefik.http.routers.n8n.middlewares=n8n@docker
+    environment:
+      - EXTERNAL_FRONTEND_HOOKS_URLS=
+      - N8N_DIAGNOSTICS_CONFIG_FRONTEND=
+      - N8N_DIAGNOSTICS_CONFIG_BACKEND=
+      - N8N_DIAGNOSTICS_ENABLED=false
+      - N8N_VERSION_NOTIFICATIONS_ENABLED=false
+      - N8N_TEMPLATES_ENABLED=false
+      - N8N_PROTOCOL=https
+      - N8N_HOST=n8n.myaiya.dev
+      - WEBHOOK_URL=https://n8n.myaiya.dev/
+      - N8N_SECURE_COOKIE=false
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=mydatabase
+      - DB_POSTGRESDB_USER=myuser
+      - DB_POSTGRESDB_PASSWORD=mypassword
+      - N8N_PORT=5678
+      - NODE_ENV=production
+      - EXECUTIONS_MODE=queue
+      - QUEUE_BULL_REDIS_HOST=redis
+      - QUEUE_HEALTH_CHECK_ACTIVE=true
+      - DOMAIN_NAME=myaiya.dev
+      - SUBDOMAIN=n8n
+      - GENERIC_TIMEZONE=Asia/Hong_Kong
+    volumes:
+      - n8n_data:/home/node/.n8n
+  n8n-queue:
+    image: docker.n8n.io/n8nio/n8n
+    container_name: n8n-queue
+    ports:
+      - "127.0.0.1:5679:5678"
+    command:
+      - "worker"
+      - "--concurrency"
+      - "3"
+    environment:
+      - EXTERNAL_FRONTEND_HOOKS_URLS=
+      - N8N_DIAGNOSTICS_CONFIG_FRONTEND=
+      - N8N_DIAGNOSTICS_CONFIG_BACKEND=
+      - N8N_DIAGNOSTICS_ENABLED=false
+      - N8N_VERSION_NOTIFICATIONS_ENABLED=false
+      - N8N_TEMPLATES_ENABLED=false
+      - N8N_PROTOCOL=https
+      - N8N_HOST=n8n.myaiya.dev
+      - WEBHOOK_URL=https://n8n.myaiya.dev/
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=mydatabase
+      - DB_POSTGRESDB_USER=myuser
+      - DB_POSTGRESDB_PASSWORD=mypassword
+      - NODE_ENV=production
+      - QUEUE_BULL_REDIS_HOST=redis
+      - QUEUE_HEALTH_CHECK_ACTIVE=true
+      - N8N_ENCRYPTION_KEY=2CkM+8TG/ICpSuQD6zHrBkE4DKRFkfmW
+    volumes:
+      - n8n_data:/home/node/.n8n
+# redis is used for the queue
+  redis:
+    image: redis:6-alpine
+    container_name: redis
+    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - redis_data:/data
+  postgres:
+    image: postgres:13
+    container_name: postgres
+    restart: always
+    environment:
+      - POSTGRES_USER=myuser
+      - POSTGRES_PASSWORD=mypassword
+      - POSTGRES_DB=mydatabase
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  n8n_data:
+    external: true
+  postgres_data:
+    external: true
+  traefik_data:
+    external: true
+  redis_data:
+    external: true
+  
