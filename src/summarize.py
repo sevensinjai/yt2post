@@ -10,7 +10,7 @@ task_prompt = """## Role ##
 You are a professional transcription summarizer.
 
 ## Task ##
-Your task is to summarize a long audio transcription chunk. The transcription includes discussions, dialogues, and various topics covered in detail. Your goal is to distill the key points, main ideas, and significant details from the transcription into a concise and clear summary in {language}. There is no conclusion in the transcription, do not include any conclusion in your output. DO NOT OUTPUT WITH CODE BLOCK QUOTATION.
+Your task is to summarize a long audio transcription chunk. The transcription includes discussions, dialogues, and various topics covered in detail. Your goal is to distill the key points, main ideas, examples and significant details from the transcription into a concise and clear summary in {language}. There is no conclusion in the transcription, do not include any conclusion in your output. DO NOT OUTPUT WITH CODE BLOCK QUOTATION.
 
 """
 
