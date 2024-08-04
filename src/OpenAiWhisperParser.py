@@ -61,20 +61,23 @@ class OpenAIWhisperParser(BaseBlobParser):
         }
         return {k: v for k, v in params.items() if v is not None}
 
-
     def process_audio_chunk(self, blob_path, start_time, end_time):
         output_path = f"{blob_path}.tmp.mp3"
-        ffmpeg.input(blob_path, ss=start_time, t=end_time - start_time).output(output_path, format="mp3").run()
+        ffmpeg.input(blob_path, ss=start_time, t=end_time - start_time).output(
+            output_path, format="mp3"
+        ).run()
         return output_path
 
     def transcribe_audio(self, file_path):
         with open(file_path, "rb") as file_obj:
             for attempt in range(1, 4):
                 try:
-                    transcript = openai.OpenAI(api_key=self.api_key).audio.transcriptions.create(
+                    transcript = openai.OpenAI(
+                        api_key=self.api_key
+                    ).audio.transcriptions.create(
                         model="whisper-1", file=file_obj, **self._create_params
                     )
-                    return transcript.to_dict()["segments"]
+                    return transcript
                 except Exception as e:
                     print(f"Attempt {attempt} failed. Exception: {str(e)}")
                     time.sleep(5)
@@ -92,18 +95,24 @@ class OpenAIWhisperParser(BaseBlobParser):
         probe = ffmpeg.probe(blob.path)
         duration = float(probe["format"]["duration"])
 
-
+        detected_lang = None
         result = []
         start_time = 0
         while start_time < duration:
             end_time = min(start_time + chunk_duration_second, duration)
             audio_chunk_path = self.process_audio_chunk(blob.path, start_time, end_time)
-            segments = self.transcribe_audio(audio_chunk_path)
+            transcript = self.transcribe_audio(audio_chunk_path)
             os.remove(audio_chunk_path)
-            
-            if not segments:
+
+            if not transcript:
                 break  # Exit if transcription fails
-            
+
+            # Set the detected language
+            if detected_lang is None:
+                print(transcript.to_dict())
+                detected_lang = transcript.to_dict()["language"]
+
+            segments = transcript.to_dict()["segments"]
             # adjust the start time and end time of each segment
             for i, _segment in enumerate(segments):
                 segments[i]["start"] += start_time
@@ -112,18 +121,21 @@ class OpenAIWhisperParser(BaseBlobParser):
             # Exclude the last segment to avoid overlap, unless it's the last chunk
             if end_time < duration and duration > chunk_duration_second:
                 segments = segments[:-1]
-            
+
             result.extend(segments)
-            
+
             if duration < chunk_duration_second or end_time == duration:
-                break;  # Exit loop if the video is shorter than the chunk duration
+                break
+                # Exit loop if the video is shorter than the chunk duration
 
             start_time = segments[-1]["end"] + 0.1
-        
+
         os.remove(blob.path)
         yield Document(
             # update the page content to be the str
-            page_content= " ".join([ line['text'] for line in result]),
+            page_content=" ".join([line["text"] for line in result]),
             metadata={
-                "segements": result,
-            })
+                "segments": result,
+                "detected_language": detected_lang,
+            },
+        )

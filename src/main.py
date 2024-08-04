@@ -8,6 +8,7 @@ import re
 import os
 import langcodes
 from dotenv import load_dotenv
+from typing import Optional, List
 
 load_dotenv()
 
@@ -49,15 +50,17 @@ def get_youtube_video_id(url):
 def translate_language_code(code):
     if code == "zh-Hant":
         return "Traditional Chinese"
+    elif code == "Chinese":
+        return "Traditional Chinese"
     try:
         language = langcodes.Language.get(code)
         return language.display_name()
     except:
-        return "English"
+        return code
 
 
 # import from open ai type
-def get_video_summary(urls: List[str], save_dir: str, lang: str):
+def get_video_summary(urls: List[str], save_dir: str, lang: Optional[List[str]]):
     loader = GenericLoader(
         YoutubeAudioLoader(urls, save_dir),
         OpenAIWhisperParser(
@@ -68,10 +71,20 @@ def get_video_summary(urls: List[str], save_dir: str, lang: str):
     )
 
     docs = loader.load()
+    translation_language = "English"
+    if lang and len(lang) > 0:
+        translation_language = translate_language_code(lang[0])
+    else:
+        translation_language = docs[0].metadata["detected_language"]
+    
+    print("====", translation_language)
+
     # output of the loader is guaranteed to len 1 because we only have one video
-    segements = docs[0].metadata["segements"]
+    segments = docs[0].metadata["segments"]
     html = turn_segment_to_html_summary(
-        segements, urls[0], translate_language_code(lang[0])
+        segments,
+        urls[0],
+        translation_language,
     )
 
     return html
@@ -80,10 +93,10 @@ def get_video_summary(urls: List[str], save_dir: str, lang: str):
 # short, cloud
 # python .n8n/main.py --urls "https://www.youtube.com/watch?v=-DPaCgcYAIo"
 # long, local
-# python ./yt2text/main.py --urls "https://www.youtube.com/watch?v=I6FWyej8e38"
+# python ./src/main.py --urls "https://www.youtube.com/watch?v=I6FWyej8e38"
 # short, local
-# python ./yt2text/main.py --urls "https://www.youtube.com/watch?v=ekuAy3DTfVw"
-# python ./yt2text/main.py --urls "https://www.youtube.com/watch?v=gYkKW6bAC4U" --lang "zh-TW"
+# python ./src/main.py --urls "https://www.youtube.com/watch?v=ekuAy3DTfVw"
+# python ./src/main.py --urls "https://www.youtube.com/watch?v=gYkKW6bAC4U" --lang "zh-TW"
 
 
 if __name__ == "__main__":
